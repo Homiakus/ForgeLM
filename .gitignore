@@ -1,0 +1,4 @@
+bin/
+*.o
+*.cubin
+.DS_Store
