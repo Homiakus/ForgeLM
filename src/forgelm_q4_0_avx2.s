@@ -115,3 +115,138 @@ forgelm_vec_dot_q4_0_f32:
     pop rbx
     pop rbp
     ret
+
+/* =========================================================================
+ * forgelm_gemv_q4_0_row_range
+ * 
+ * Параллельное умножение квантованной матрицы Q4_0 на вектор FP32 для диапазона строк
+ * void forgelm_gemv_q4_0_row_range(float *out, const void *A_blocks, const float *x,
+ *                                  int start_row, int end_row, int K);
+ *
+ * ABI:
+ *   RDI: out
+ *   RSI: A_blocks (указатель на непрерывный массив блоков Q4_0 матрицы M x K)
+ *   RDX: x (float32 вектор длины K)
+ *   RCX: start_row
+ *   R8:  end_row
+ *   R9:  K (кратно 32)
+ * ========================================================================= */
+.globl forgelm_gemv_q4_0_row_range
+.type forgelm_gemv_q4_0_row_range, @function
+forgelm_gemv_q4_0_row_range:
+    push rbp
+    mov rbp, rsp
+    push rbx
+    push r12
+    push r13
+    push r14
+    push r15
+
+    mov r12, rdi             # out
+    mov r13, rsi             # A_blocks
+    mov r14, rdx             # x
+    mov r15, r8              # end_row
+    mov rbx, r9              # K
+
+    # Число блоков на одну строку: nb = K / 32
+    mov rax, rbx
+    shr rax, 5
+    # Размер одной строки в байтах: row_bytes = nb * 18
+    imul rax, 18
+    push rax                 # [rsp] = row_bytes
+
+    # Загружаем константы нибблов в xmm10 и xmm11
+    vmovdqa xmm10, [.L_mask_low_nibble + rip]
+    vmovdqa xmm11, [.L_offset_eight + rip]
+
+    mov r8, rcx              # curr_row = start_row
+
+.L_gemv_q4_row_loop:
+    cmp r8, r15
+    jge .L_gemv_q4_exit
+
+    # Вычисляем указатель на начало текущей строки:
+    # A_row = A_blocks + curr_row * row_bytes
+    mov rax, r8
+    imul rax, [rsp]          # curr_row * row_bytes
+    lea r10, [r13 + rax]     # r10 = ptr to current row's blocks
+
+    mov r11, r14             # r11 = ptr to x
+    vxorps ymm0, ymm0, ymm0  # sum accumulator
+
+    # Число блоков: cnt = K / 32
+    mov rax, rbx
+    shr rax, 5
+
+.L_gemv_q4_inner_loop:
+    test rax, rax
+    jz .L_gemv_q4_inner_done
+
+    # 1. Scale FP16 -> Float32
+    vcvtph2ps xmm1, [r10]
+    vbroadcastss ymm1, xmm1
+
+    # 2. 16 байт нибблов
+    vmovdqu xmm2, [r10 + 2]
+
+    vpand xmm3, xmm2, xmm10
+    vpsubb xmm3, xmm3, xmm11
+
+    vpsrlw xmm4, xmm2, 4
+    vpand xmm4, xmm4, xmm10
+    vpsubb xmm4, xmm4, xmm11
+
+    # Четверти блока (0..7, 8..15, 16..23, 24..31)
+    vpmovsxbd ymm5, xmm3
+    vcvtdq2ps ymm5, ymm5
+    vmulps ymm5, ymm5, ymm1
+    vmovups ymm6, [r11]
+    vfmadd231ps ymm0, ymm5, ymm6
+
+    vpsrldq xmm7, xmm3, 8
+    vpmovsxbd ymm5, xmm7
+    vcvtdq2ps ymm5, ymm5
+    vmulps ymm5, ymm5, ymm1
+    vmovups ymm6, [r11 + 32]
+    vfmadd231ps ymm0, ymm5, ymm6
+
+    vpmovsxbd ymm5, xmm4
+    vcvtdq2ps ymm5, ymm5
+    vmulps ymm5, ymm5, ymm1
+    vmovups ymm6, [r11 + 64]
+    vfmadd231ps ymm0, ymm5, ymm6
+
+    vpsrldq xmm7, xmm4, 8
+    vpmovsxbd ymm5, xmm7
+    vcvtdq2ps ymm5, ymm5
+    vmulps ymm5, ymm5, ymm1
+    vmovups ymm6, [r11 + 96]
+    vfmadd231ps ymm0, ymm5, ymm6
+
+    add r10, 18
+    add r11, 128
+    dec rax
+    jmp .L_gemv_q4_inner_loop
+
+.L_gemv_q4_inner_done:
+    # Горизонтальная редукция аккумулятора ymm0 -> float scalar
+    vextractf128 xmm1, ymm0, 1
+    vaddps xmm0, xmm0, xmm1
+    vhaddps xmm0, xmm0, xmm0
+    vhaddps xmm0, xmm0, xmm0
+
+    vmovss [r12 + r8*4], xmm0
+    inc r8
+    jmp .L_gemv_q4_row_loop
+
+.L_gemv_q4_exit:
+    pop rax                  # pop row_bytes
+    vzeroupper
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+    pop rbp
+    ret
+
