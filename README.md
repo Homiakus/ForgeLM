@@ -4,8 +4,9 @@
 [![Architecture](https://img.shields.io/badge/ISA-AVX2%20%2B%20FMA%20%2B%20F16C%20%2B%20RDRAND-green.svg)](src/forgelm_math_avx2.s)
 [![Quantization](https://img.shields.io/badge/Quant-Q4__0%20%7C%20Q4__K%20%7C%20FP32-orange.svg)](src/forgelm_q4_0_avx2.s)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Zero%20(Direct%20Linux%20Syscalls)-red.svg)](src/forgelm_syscalls.s)
-[![Binary Size](https://img.shields.io/badge/Binary%20Size-9.1%20KB-brightgreen.svg)](bin/forgelm_standalone)
+[![Binary Size](https://img.shields.io/badge/Binary%20Size-13%20KB%20(incl.%20TUI)-brightgreen.svg)](bin/forgelm_standalone)
 [![Cold Boot](https://img.shields.io/badge/Cold%20Boot-0.15%20ms-success.svg)](README.md#cold-boot)
+[![TUI](https://img.shields.io/badge/Interface-Progressive%20Zero--Libc%20TUI-cyan.svg)](src/forgelm_tui.s)
 [![License](https://img.shields.io/badge/License-MIT-brightgreen.svg)](LICENSE)
 
 **ForgeLM** — автономный высокопроизводительный рантайм для локального инференса больших языковых моделей (LLM), написанный **полностью на чистом низкоуровневом ассемблере** (x86-64 SIMD, CUDA PTX, AArch64 NEON, WASM SIMD128) **без единой зависимости** от `libc`, `libstdc++`, аллокаторов или внешних фреймворков.
@@ -54,6 +55,11 @@ ForgeLM решает фундаментальную проблему совре�
 
 ### 10. Аппаратный сэмплер токенов (CPU RDRAND)
 * Scaled Softmax, Argmax (Greedy) и Top-P Nucleus Sampling на аппаратном генераторе случайных чисел процессора **`RDRAND`** без обращений к ОС.
+
+### 11. Прогрессивное интерактивное TUI Меню (Zero-NCurses / Pure ASM)
+* Собственный полноэкранный текстовый интерфейс терминала на управляющих ANSI VT100 последовательностях и прямых `sys_ioctl(TCGETS/TCSETS)`.
+* Навигация стрелками `↑`/`↓`, клавишами `k`/`j`, выбор по `Enter`, выход по `q`.
+* Информационный дашборд с мониторингом активных векторных расширений, статуса ядер и оперативных режимов работы. Встроено в бинарник размером **13 КБ**.
 
 ---
 
@@ -148,7 +154,10 @@ make test
 
 ### Запуск автономного бинарника без зависимостей
 ```bash
-# Прямой запуск 9-килобайтного бинарника
+# Интерактивное прогрессивное TUI меню
+./bin/forgelm_standalone --tui
+
+# Прямой запуск без параметров (справка и верификация)
 ./bin/forgelm_standalone
 
 # Запуск с указанием GGUF модели (прямой mmap и валидация)

@@ -23,9 +23,12 @@
 .L_banner_len = . - .L_banner
 
 .L_usage:
-    .ascii "Usage: forgelm_standalone <model.gguf> [-p prompt] [--server]\n"
-    .ascii "Note: Running in verification mode (no model passed).\n"
+    .ascii "Usage: forgelm_standalone [model.gguf] [--tui] [--server]\n"
+    .ascii "Note: Running in interactive mode or verification mode.\n"
 .L_usage_len = . - .L_usage
+
+.L_tui_arg:
+    .asciz "--tui"
 
 .L_model_ok:
     .ascii "[Engine] Model file successfully mapped via sys_mmap! GGUF header valid.\n"
@@ -48,11 +51,30 @@ _start:
     # 2. Проверяем argc со стека: [rsp]
     mov rbx, [rsp]           # argc
     cmp rbx, 1
-    jle .L_print_usage
+    jle .L_run_tui_or_usage
 
     # argv[1] находится в [rsp + 16]
-    mov rdi, [rsp + 16]      # filename
+    mov rdi, [rsp + 16]      # filename / flag
 
+    # Проверяем, передан ли флаг "--tui" (6 байт: '-' '-' 't' 'u' 'i' 0)
+    cmp byte ptr [rdi], '-'
+    jne .L_check_open_file
+    cmp byte ptr [rdi + 1], '-'
+    jne .L_check_open_file
+    cmp byte ptr [rdi + 2], 't'
+    jne .L_check_open_file
+    cmp byte ptr [rdi + 3], 'u'
+    jne .L_check_open_file
+    cmp byte ptr [rdi + 4], 'i'
+    jne .L_check_open_file
+    cmp byte ptr [rdi + 5], 0
+    jne .L_check_open_file
+
+    # Флаг --tui передан!
+    call forgelm_tui_run
+    jmp .L_exit_clean
+
+.L_check_open_file:
     # sys_open(filename, O_RDONLY=0, mode=0)
     mov rax, 2               # sys_open
     xor rsi, rsi             # O_RDONLY
@@ -112,7 +134,7 @@ _start:
 
     jmp .L_exit_clean
 
-.L_print_usage:
+.L_run_tui_or_usage:
     mov rax, 1
     mov rdi, 1
     lea rsi, [.L_usage + rip]

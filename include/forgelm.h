@@ -67,6 +67,10 @@ int   forgelm_jit_compile_gemv_row(void *code_buf, int K);
 int forgelm_radix_find_prefix(const int *prompt_tokens, int prompt_len,
                               const void *root_node, int *out_cached_pages, int max_pages);
 
+// Progressive TUI Menu
+void forgelm_tui_render(const char **items, int count, int selected_idx);
+int  forgelm_tui_run(void);
+
 #ifdef __cplusplus
 }
 #endif
